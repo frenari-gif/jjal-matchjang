@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#10131a"/>
+  <rect x="80" y="70" width="1040" height="490" rx="36" fill="#181d27" stroke="#30394c" stroke-width="4"/>
+  <path d="M150 480 L320 310 L430 410 L560 260 L720 480 Z" fill="#2dd4bf"/>
+  <circle cx="310" cy="220" r="64" fill="#fbbf24"/>
+  <text x="760" y="285" font-family="Arial, sans-serif" font-size="96" font-weight="800" fill="#f4f7fb">짤맞짱</text>
+  <text x="765" y="355" font-family="Arial, sans-serif" font-size="34" fill="#9da8bc">실시간 멀티 짤 제목 대결</text>
+</svg>

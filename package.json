@@ -1,0 +1,32 @@
+{
+  "name": "jjal-matchjang",
+  "version": "0.1.0",
+  "private": true,
+  "description": "짤맞짱 실시간 멀티 웹게임 MVP",
+  "scripts": {
+    "dev": "node server.js",
+    "build": "prisma generate && next build",
+    "start": "cross-env NODE_ENV=production node server.js",
+    "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate",
+    "db:push": "node scripts/ensure-sqlite-db.js && prisma db push",
+    "load:test": "node scripts/load-test.js"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "cross-env": "7.0.3",
+    "dotenv": "16.6.1",
+    "next": "15.5.18",
+    "prisma": "6.19.3",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "socket.io": "4.8.3",
+    "socket.io-client": "4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.0",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3"
+  }
+}

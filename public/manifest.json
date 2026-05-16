@@ -1,0 +1,15 @@
+{
+  "name": "짤맞짱",
+  "short_name": "짤맞짱",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#10131a",
+  "theme_color": "#10131a",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

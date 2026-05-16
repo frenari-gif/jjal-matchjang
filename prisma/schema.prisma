@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model GameRecord {
+  id          String    @id @default(cuid())
+  roomCode    String
+  totalRounds Int
+  winnerName  String?
+  playersJson String
+  roundsJson  String
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+}
+
+model PlayerProfile {
+  id                     String   @id @default(cuid())
+  playerSessionId        String   @unique
+  nickname               String
+  totalPlayedGames       Int      @default(0)
+  totalPlayedRounds      Int      @default(0)
+  totalWonGames          Int      @default(0)
+  totalRoundWins         Int      @default(0)
+  totalVotesReceived     Int      @default(0)
+  totalCaptionsSubmitted Int      @default(0)
+  averageVotesReceived   Float    @default(0)
+  lastSeenAt             DateTime @default(now())
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model GameImage {
+  id        String   @id @default(cuid())
+  src       String   @unique
+  title     String
+  tagsJson  String   @default("[]")
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ReportRecord {
+  id               String   @id @default(cuid())
+  roomCode         String
+  roundIndex       Int
+  submissionId     String
+  captionText      String
+  authorPlayerId   String?
+  authorNickname   String
+  reporterPlayerId String?
+  reporterNickname String
+  status           String   @default("pending")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model BannedWord {
+  id        String   @id @default(cuid())
+  word      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model AdminLog {
+  id           String   @id @default(cuid())
+  type         String
+  message      String
+  roomCode     String?
+  actor        String?
+  metadataJson String?
+  createdAt    DateTime @default(now())
+}
