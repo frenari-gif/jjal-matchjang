@@ -60,7 +60,15 @@ a:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 18px;
   margin-bottom: 18px;
+}
+
+.top-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .brand {
@@ -104,6 +112,46 @@ a:focus-visible {
 .connection.is-online {
   border-color: rgba(45, 212, 191, 0.5);
   color: var(--accent);
+}
+
+.sound-control {
+  position: relative;
+}
+
+.sound-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  width: 260px;
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #151a24;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+  padding: 14px;
+}
+
+.sound-mute {
+  justify-content: space-between;
+}
+
+.sound-slider {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.sound-slider span {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sound-slider input {
+  width: 100%;
 }
 
 .notice,
@@ -281,6 +329,13 @@ a:focus-visible {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
+}
+
+.option-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 0 0 18px;
 }
 
 .room-name-field {
@@ -463,6 +518,19 @@ a:focus-visible {
   letter-spacing: 3px;
 }
 
+.room-code em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.room-code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .phase-badge,
 .timer {
   min-height: 44px;
@@ -601,6 +669,19 @@ a:focus-visible {
   border-radius: 999px;
 }
 
+.room-settings-editor {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #111722;
+  padding: 14px;
+}
+
+.compact-heading {
+  margin-bottom: 2px;
+}
+
 .image-stage {
   display: grid;
   place-items: center;
@@ -631,6 +712,11 @@ a:focus-visible {
   margin: 0 auto;
 }
 
+.caption-input-wrap {
+  display: grid;
+  gap: 6px;
+}
+
 .caption-form input {
   min-height: 48px;
   border: 1px solid var(--line);
@@ -643,6 +729,36 @@ a:focus-visible {
 
 .caption-form input:focus {
   border-color: var(--accent);
+}
+
+.caption-edit-status {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.round-action-bar {
+  position: sticky;
+  top: 24px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  border-radius: 8px;
+  background: rgba(17, 23, 34, 0.98);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  padding: 12px;
+}
+
+.round-action-bar div {
+  display: grid;
+  gap: 4px;
+}
+
+.round-action-bar span {
+  color: var(--muted);
 }
 
 .submission-list {

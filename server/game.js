@@ -89,6 +89,8 @@ function setupGameSocket(io, prisma) {
         code,
         name: normalizeRoomName(payload?.roomName) || `${nickname}의 방`,
         isPublic: payload?.isPublic !== false,
+        streamerMode: Boolean(payload?.streamerMode),
+        hideRoomCode: Boolean(payload?.hideRoomCode),
         hostId: player.id,
         settings,
         phase: "lobby",
@@ -266,6 +268,54 @@ function setupGameSocket(io, prisma) {
       emitPublicRooms(io);
     });
 
+    socket.on("room:updateSettings", (payload, callback) => {
+      const result = getRoomAndPlayer(socket);
+      if (!result) return reply(callback, false, "참가 중인 방이 없습니다.");
+
+      const { room, player } = result;
+      if (room.hostId !== player.id) return reply(callback, false, "방장만 설정을 변경할 수 있습니다.");
+      if (room.phase !== "lobby") return reply(callback, false, "게임 시작 후에는 방 설정을 변경할 수 없습니다.");
+      if (isRateLimited(player, "settings")) return reply(callback, false, "요청이 너무 빠릅니다. 잠시 후 다시 시도해 주세요.");
+
+      const currentPlayerCount = connectedPlayers(room).length;
+      const nextSettings = normalizeSettings(payload?.settings || room.settings);
+      if (currentPlayerCount > nextSettings.maxPlayers) {
+        return reply(callback, false, "현재 인원보다 최대 인원을 낮게 설정할 수 없습니다.");
+      }
+
+      const nextName = normalizeRoomName(payload?.roomName) || room.name;
+      const nextPublic = typeof payload?.isPublic === "boolean" ? payload.isPublic : room.isPublic;
+      const nextStreamerMode = typeof payload?.streamerMode === "boolean" ? payload.streamerMode : Boolean(room.streamerMode);
+      const nextHideRoomCode = typeof payload?.hideRoomCode === "boolean" ? payload.hideRoomCode : Boolean(room.hideRoomCode);
+      const messages = describeRoomSettingChanges(room, {
+        name: nextName,
+        isPublic: nextPublic,
+        streamerMode: nextStreamerMode,
+        hideRoomCode: nextHideRoomCode,
+        settings: nextSettings
+      });
+
+      if (messages.length === 0) {
+        return reply(callback, true, null, { state: serializeRoom(room, player.id) });
+      }
+
+      room.name = nextName;
+      room.isPublic = nextPublic;
+      room.streamerMode = nextStreamerMode;
+      room.hideRoomCode = nextHideRoomCode;
+      room.settings = nextSettings;
+      for (const message of messages) addSystemChatMessage(room, message);
+      touchRoom(room);
+      logEvent("room_settings_updated", "Room settings updated", {
+        roomCode: room.code,
+        actor: player.nickname,
+        metadata: { messages }
+      });
+      reply(callback, true, null, { state: serializeRoom(room, player.id) });
+      emitRoomState(io, room);
+      emitPublicRooms(io);
+    });
+
     socket.on("game:start", (callback) => {
       const result = getRoomAndPlayer(socket);
       if (!result) return reply(callback, false, "참가 중인 방이 없습니다.");
@@ -335,7 +385,9 @@ function setupGameSocket(io, prisma) {
         text: validation.text,
         votes: [],
         reports: [],
-        hidden: false
+        hidden: false,
+        editCount: 0,
+        edited: false
       });
 
       touchRoom(room);
@@ -345,6 +397,31 @@ function setupGameSocket(io, prisma) {
       } else {
         emitRoomState(io, room);
       }
+    });
+
+    socket.on("caption:update", async (payload, callback) => {
+      const result = getRoomAndPlayer(socket);
+      if (!result) return reply(callback, false, "참가 중인 방이 없습니다.");
+      const { room, player } = result;
+      if (isRateLimited(player, "captionEdit")) return reply(callback, false, "요청이 너무 빠릅니다. 잠시 후 다시 시도해 주세요.");
+      if (room.phase !== "caption") return reply(callback, false, "제목 작성 시간이 아닙니다.");
+
+      const submission = room.submissions.find((candidate) => candidate.playerId === player.id);
+      if (!submission) return reply(callback, false, "수정할 제목이 없습니다.");
+      if ((submission.editCount || 0) >= 1) return reply(callback, false, "제목 수정은 라운드당 1회만 가능합니다.");
+
+      const validation = validateCaption(payload?.text);
+      if (!validation.ok) return reply(callback, false, validation.error);
+      if (await containsBannedWord(validation.text)) {
+        return reply(callback, false, "금칙어가 포함된 제목은 제출할 수 없습니다.");
+      }
+
+      submission.text = validation.text;
+      submission.editCount = (submission.editCount || 0) + 1;
+      submission.edited = true;
+      touchRoom(room);
+      reply(callback, true, null, { state: serializeRoom(room, player.id) });
+      emitRoomState(io, room);
     });
 
     socket.on("caption:report", async (payload, callback) => {
@@ -815,6 +892,38 @@ async function getBannedWordList() {
 function invalidateBannedWordCache() {
   bannedWordCache = [];
   bannedWordCacheAt = 0;
+}
+
+function describeRoomSettingChanges(room, next) {
+  const messages = [];
+  const settingLabels = {
+    roundCount: ["라운드 수", "라운드"],
+    captionSeconds: ["제목 작성 시간", "초"],
+    voteSeconds: ["투표 시간", "초"],
+    minPlayers: ["최소 시작 인원", "명"],
+    maxPlayers: ["최대 인원", "명"]
+  };
+
+  if (room.name !== next.name) {
+    messages.push(`방 이름이 '${room.name}' → '${next.name}'으로 변경되었습니다.`);
+  }
+  if (room.isPublic !== next.isPublic) {
+    messages.push(`방이 ${next.isPublic ? "공개방" : "비공개방"}으로 변경되었습니다.`);
+  }
+  if (Boolean(room.streamerMode) !== next.streamerMode) {
+    messages.push(`스트리머 모드가 ${next.streamerMode ? "켜졌습니다" : "꺼졌습니다"}.`);
+  }
+  if (Boolean(room.hideRoomCode) !== next.hideRoomCode) {
+    messages.push(`방 코드 비공개 모드가 ${next.hideRoomCode ? "켜졌습니다" : "꺼졌습니다"}.`);
+  }
+
+  for (const [key, [label, unit]] of Object.entries(settingLabels)) {
+    if (room.settings[key] !== next.settings[key]) {
+      messages.push(`${label}이 ${room.settings[key]}${unit} → ${next.settings[key]}${unit}로 수정되었습니다.`);
+    }
+  }
+
+  return messages;
 }
 
 function ensurePlayerProfile(player) {
@@ -1377,6 +1486,8 @@ function serializeRoom(room, viewerPlayerId) {
     code: room.code,
     name: room.name,
     isPublic: room.isPublic,
+    streamerMode: Boolean(room.streamerMode),
+    hideRoomCode: Boolean(room.hideRoomCode),
     phase: room.phase,
     hostId: room.hostId,
     currentPlayerId: viewerPlayerId,
@@ -1388,16 +1499,19 @@ function serializeRoom(room, viewerPlayerId) {
     submissions: room.submissions.map((submission) => {
       const author = room.players.find((player) => player.id === submission.playerId);
       const hidden = Boolean(submission.hidden);
+      const mine = submission.playerId === viewerPlayerId;
+      const canSeeText = room.phase !== "caption" || mine;
       return {
         id: submission.id,
-        text: hidden ? "[신고로 숨겨진 제목]" : submission.text,
+        text: hidden ? "[신고로 숨겨진 제목]" : canSeeText ? submission.text : "제출 완료",
         votes: hidden ? 0 : submission.votes.length,
         hidden,
         reportCount: submission.reports.length,
         reportedByMe: submission.reports.some((report) => report.playerId === viewerPlayerId),
         authorId: phaseShowsAuthor ? submission.playerId : null,
         authorName: phaseShowsAuthor ? author?.nickname || "알 수 없음" : null,
-        mine: submission.playerId === viewerPlayerId,
+        mine,
+        edited: Boolean(submission.edited),
         votedByMe: submission.votes.includes(viewerPlayerId)
       };
     }),
@@ -1406,6 +1520,8 @@ function serializeRoom(room, viewerPlayerId) {
       mine: message.playerId === viewerPlayerId
     })),
     mySubmissionId: room.submissions.find((submission) => submission.playerId === viewerPlayerId)?.id || null,
+    mySubmissionText: room.submissions.find((submission) => submission.playerId === viewerPlayerId)?.text || null,
+    myCaptionEditRemaining: Math.max(0, 1 - (room.submissions.find((submission) => submission.playerId === viewerPlayerId)?.editCount || 0)),
     myVoteSubmissionId: room.submissions.find((submission) => submission.votes.includes(viewerPlayerId))?.id || null,
     endsAt: room.endsAt,
     serverNow: Date.now(),
@@ -1481,6 +1597,8 @@ function roomSummary(room) {
     name: room.name,
     phase: room.phase,
     isPublic: room.isPublic,
+    streamerMode: Boolean(room.streamerMode),
+    hideRoomCode: Boolean(room.hideRoomCode),
     playerCount: connectedPlayers(room).length,
     totalPlayers: room.players.length,
     maxPlayers: room.settings.maxPlayers,
