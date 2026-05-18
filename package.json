@@ -4,9 +4,9 @@
   "private": true,
   "description": "짤맞짱 실시간 멀티 웹게임 MVP",
   "scripts": {
-    "dev": "node server.js",
+    "dev": "node scripts/ensure-sqlite-db.js && prisma db push && node server.js",
     "build": "prisma generate && next build",
-    "start": "cross-env NODE_ENV=production node server.js",
+    "start": "cross-env NODE_ENV=production node scripts/ensure-sqlite-db.js && cross-env NODE_ENV=production prisma db push && cross-env NODE_ENV=production node server.js",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "db:push": "node scripts/ensure-sqlite-db.js && prisma db push",

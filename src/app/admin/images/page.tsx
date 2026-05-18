@@ -89,6 +89,7 @@ export default function AdminImagesPage() {
         </div>
         <div className="admin-header-actions">
           <a className="ghost-link" href="/admin">관리자 홈</a>
+          <a className="ghost-link" href="/admin/image-submissions">이미지 신청</a>
           <button type="button" className="ghost-button" onClick={logout}>로그아웃</button>
         </div>
       </header>

@@ -1101,6 +1101,46 @@ a:focus-visible {
   font-size: 22px;
 }
 
+.image-submission-modal {
+  width: min(720px, 100%);
+}
+
+.image-submission-form {
+  display: grid;
+  gap: 14px;
+}
+
+.image-submission-form textarea {
+  min-height: 108px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0d1118;
+  color: var(--text);
+  padding: 12px;
+  outline: none;
+  font: inherit;
+}
+
+.image-submission-form textarea:focus {
+  border-color: var(--accent);
+}
+
+.image-submission-guidance {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #111722;
+  padding: 14px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.image-submission-guidance strong {
+  color: var(--text);
+}
+
 .admin-shell {
   display: grid;
   gap: 18px;
@@ -1226,6 +1266,7 @@ a:focus-visible {
 
 .admin-room,
 .admin-report,
+.image-submission-admin-card,
 .log-row {
   display: grid;
   gap: 8px;
@@ -1247,6 +1288,7 @@ a:focus-visible {
 .admin-room-head span,
 .admin-mini-row span,
 .admin-report span,
+.image-submission-admin-card span,
 .log-row span,
 .image-admin-card span {
   color: var(--muted);
@@ -1320,4 +1362,21 @@ a:focus-visible {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+.image-submission-admin-card textarea {
+  min-height: 76px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0d1118;
+  color: var(--text);
+  padding: 10px;
+  outline: none;
+  font: inherit;
+}
+
+.image-submission-admin-card a {
+  color: var(--accent);
+  overflow-wrap: anywhere;
 }

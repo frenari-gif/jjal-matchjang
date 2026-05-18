@@ -69,6 +69,12 @@ type PlayerProfile = {
   createdAt: string;
 };
 
+type ImageSubmissionDraft = {
+  imageUrl: string;
+  title: string;
+  description: string;
+};
+
 type RoomState = {
   code: string;
   name: string;
@@ -179,6 +185,13 @@ export default function Home() {
   const [roomCodeVisible, setRoomCodeVisible] = useState(false);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [imageSubmissionOpen, setImageSubmissionOpen] = useState(false);
+  const [imageSubmissionDraft, setImageSubmissionDraft] = useState<ImageSubmissionDraft>({
+    imageUrl: "",
+    title: "",
+    description: ""
+  });
+  const [imageSubmitting, setImageSubmitting] = useState(false);
   const [clockOffset, setClockOffset] = useState(0);
   const [now, setNow] = useState(Date.now());
   const nicknameInputRef = useRef<HTMLInputElement>(null);
@@ -366,6 +379,7 @@ export default function Home() {
     if (error.includes("닉네임")) return "닉네임을 2~16자로 입력해 주세요.";
     if (error.includes("최소")) return "플레이어가 부족해 아직 시작할 수 없습니다.";
     if (error.includes("채팅")) return error;
+    if (error.includes("이미지")) return error;
     if (error.includes("금칙어")) return error;
     return error;
   }
@@ -552,6 +566,32 @@ export default function Home() {
     }, handleProfileAck);
   }
 
+  function submitImageSubmission(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!ensureConnected()) return;
+    if (!imageSubmissionDraft.imageUrl.trim()) {
+      showNotice("이미지 URL을 입력해 주세요.", "error");
+      return;
+    }
+
+    setImageSubmitting(true);
+    socket?.emit("imageSubmission:create", {
+      ...imageSubmissionDraft,
+      nickname,
+      playerSessionId: getOrCreatePlayerSessionId()
+    }, (response: ServerAck) => {
+      setImageSubmitting(false);
+      if (!response?.ok) {
+        showNotice(getFriendlyError(response?.error), "error");
+        return;
+      }
+
+      setImageSubmissionDraft({ imageUrl: "", title: "", description: "" });
+      setImageSubmissionOpen(false);
+      showNotice("이미지 추가 신청이 접수되었습니다. 관리자가 검토한 뒤 승인 또는 기각합니다.", "success");
+    });
+  }
+
   function focusRoomName() {
     setIsPublic(true);
     window.setTimeout(() => roomNameInputRef.current?.focus(), 0);
@@ -662,6 +702,9 @@ export default function Home() {
             </button>
             <button className="ghost-button full profile-button" onClick={openMyProfile} disabled={!connected}>
               내 정보
+            </button>
+            <button className="ghost-button full" onClick={() => setImageSubmissionOpen(true)} disabled={!connected}>
+              이미지 추가 신청
             </button>
           </div>
 
@@ -811,6 +854,9 @@ export default function Home() {
             <button className="ghost-button full" onClick={openMyProfile}>
               내 정보
             </button>
+            <button className="ghost-button full" onClick={() => setImageSubmissionOpen(true)} disabled={!connected}>
+              이미지 추가 신청
+            </button>
             <button className="ghost-button full" onClick={leaveRoom}>
               나가기
             </button>
@@ -918,6 +964,15 @@ export default function Home() {
             setProfile(null);
             setProfileLoading(false);
           }}
+        />
+      )}
+      {imageSubmissionOpen && (
+        <ImageSubmissionModal
+          draft={imageSubmissionDraft}
+          submitting={imageSubmitting}
+          onChange={setImageSubmissionDraft}
+          onSubmit={submitImageSubmission}
+          onClose={() => setImageSubmissionOpen(false)}
         />
       )}
     </main>
@@ -1170,6 +1225,83 @@ function ProfileModal({
         ) : (
           <EmptyState title="플레이어 정보를 찾을 수 없습니다" description="잠시 후 다시 시도해 주세요." />
         )}
+      </section>
+    </div>
+  );
+}
+
+function ImageSubmissionModal({
+  draft,
+  submitting,
+  onChange,
+  onSubmit,
+  onClose
+}: {
+  draft: ImageSubmissionDraft;
+  submitting: boolean;
+  onChange: (draft: ImageSubmissionDraft) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onClose: () => void;
+}) {
+  function update(key: keyof ImageSubmissionDraft, value: string) {
+    onChange({ ...draft, [key]: value });
+  }
+
+  return (
+    <div className="profile-modal-backdrop" role="presentation">
+      <section className="profile-modal image-submission-modal" role="dialog" aria-modal="true" aria-labelledby="image-submission-title">
+        <div className="profile-modal-head">
+          <div>
+            <span>운영자 검토 후 반영</span>
+            <h2 id="image-submission-title">이미지 추가 신청</h2>
+          </div>
+          <button type="button" className="ghost-button" onClick={onClose} disabled={submitting}>
+            닫기
+          </button>
+        </div>
+
+        <form className="image-submission-form" onSubmit={onSubmit}>
+          <label className="field">
+            <span>이미지 URL</span>
+            <input
+              value={draft.imageUrl}
+              onChange={(event) => update("imageUrl", event.target.value)}
+              maxLength={500}
+              placeholder="https://example.com/image.png"
+              autoFocus
+            />
+          </label>
+          <label className="field">
+            <span>이미지 제목 선택</span>
+            <input
+              value={draft.title}
+              onChange={(event) => update("title", event.target.value)}
+              maxLength={80}
+              placeholder="관리자가 구분하기 쉬운 제목"
+            />
+          </label>
+          <label className="field">
+            <span>간단한 설명 선택</span>
+            <textarea
+              value={draft.description}
+              onChange={(event) => update("description", event.target.value)}
+              maxLength={500}
+              placeholder="이미지 출처나 사용 이유를 적어 주세요."
+            />
+          </label>
+
+          <div className="image-submission-guidance">
+            <strong>신청 전 확인</strong>
+            <span>1920x1080 비율을 권장합니다.</span>
+            <span>저작권 문제가 없는 이미지만 신청해 주세요.</span>
+            <span>성인, 혐오, 폭력, 정치성 이미지는 승인되지 않습니다.</span>
+            <span>승인 후 게임 이미지 후보로 검토될 수 있습니다.</span>
+          </div>
+
+          <button className="primary-button full" disabled={submitting || !draft.imageUrl.trim()}>
+            {submitting ? "신청 중" : "신청 보내기"}
+          </button>
+        </form>
       </section>
     </div>
   );

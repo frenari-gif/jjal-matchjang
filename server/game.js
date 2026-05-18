@@ -240,6 +240,50 @@ function setupGameSocket(io, prisma) {
       }
     });
 
+    socket.on("imageSubmission:create", async (payload, callback) => {
+      try {
+        if (!prismaRef?.imageSubmission) return reply(callback, false, "이미지 신청 저장소를 사용할 수 없습니다.");
+
+        const result = getRoomAndPlayer(socket);
+        const sessionId = normalizePlayerSessionId(payload?.playerSessionId || payload?.playerKey || result?.player?.playerSessionId);
+        const nickname = normalizeNickname(payload?.nickname || result?.player?.nickname);
+        if (!sessionId) return reply(callback, false, "플레이어 세션이 없습니다.");
+        if (!nickname) return reply(callback, false, "닉네임을 입력한 뒤 신청해 주세요.");
+
+        const validation = validateImageSubmission(payload);
+        if (!validation.ok) return reply(callback, false, validation.error);
+
+        const recent = await prismaRef.imageSubmission.findFirst({
+          where: {
+            submittedBySessionId: sessionId,
+            createdAt: { gt: new Date(Date.now() - gameConfig.imageSubmissionCooldownMs) }
+          },
+          orderBy: { createdAt: "desc" }
+        });
+        if (recent) return reply(callback, false, "이미지 신청은 5분에 1회만 가능합니다.");
+
+        const submission = await prismaRef.imageSubmission.create({
+          data: {
+            imageUrl: validation.imageUrl,
+            title: validation.title || null,
+            description: validation.description || null,
+            submittedByNickname: nickname,
+            submittedBySessionId: sessionId,
+            status: "pending"
+          }
+        });
+
+        logEvent("image_submission_created", "Player submitted image URL", {
+          actor: nickname,
+          metadata: { submissionId: submission.id, imageUrl: validation.imageUrl }
+        });
+        reply(callback, true, null, { submission: formatImageSubmissionRecord(submission) });
+      } catch (error) {
+        logServerError("Failed to create image submission", error);
+        reply(callback, false, "이미지 신청을 저장하지 못했습니다.");
+      }
+    });
+
     socket.on("room:kick", (payload, callback) => {
       const result = getRoomAndPlayer(socket);
       if (!result) return reply(callback, false, "참가 중인 방이 없습니다.");
@@ -591,6 +635,12 @@ async function handleAdminRequest(req, res, prisma) {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/admin/image-submissions") {
+      const submissions = await prisma.imageSubmission.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
+      writeJson(res, 200, { ok: true, submissions: submissions.map(formatImageSubmissionRecord) });
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/admin/action") {
       const body = await readJsonBody(req);
       const result = await runAdminAction(prisma, body);
@@ -754,6 +804,28 @@ async function runAdminAction(prisma, body) {
     return { ok: true };
   }
 
+  if (action === "reviewImageSubmission") {
+    const status = normalizeImageSubmissionStatus(body.status);
+    if (!status || status === "pending") return { ok: false, error: "Invalid submission status" };
+
+    const id = String(body.id || "");
+    const adminNote = normalizeOptionalText(body.adminNote, 300);
+    const submission = await prisma.imageSubmission.update({
+      where: { id },
+      data: {
+        status,
+        adminNote: adminNote || null,
+        reviewedAt: new Date()
+      }
+    });
+
+    logEvent("admin_image_submission_reviewed", "Admin reviewed image submission", {
+      actor: "admin",
+      metadata: { id: submission.id, status }
+    });
+    return { ok: true, submission: formatImageSubmissionRecord(submission) };
+  }
+
   return { ok: false, error: "Unknown action" };
 }
 
@@ -820,6 +892,42 @@ function normalizeImageTitle(value) {
   return String(value || "").trim().replace(/\s+/g, " ").slice(0, 80);
 }
 
+function normalizeOptionalText(value, maxLength) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, maxLength);
+}
+
+function validateImageSubmission(payload) {
+  const imageUrl = String(payload?.imageUrl || "").trim();
+  if (!imageUrl) return { ok: false, error: "이미지 URL을 입력해 주세요." };
+  if (imageUrl.length > gameConfig.maxImageSubmissionUrlLength) {
+    return { ok: false, error: `이미지 URL은 최대 ${gameConfig.maxImageSubmissionUrlLength}자까지 입력할 수 있습니다.` };
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(imageUrl);
+  } catch {
+    return { ok: false, error: "올바른 이미지 URL을 입력해 주세요." };
+  }
+
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    return { ok: false, error: "이미지 URL은 http 또는 https만 허용됩니다." };
+  }
+
+  const rawTitle = String(payload?.title || "");
+  const rawDescription = String(payload?.description || "");
+  if (rawTitle.length > gameConfig.maxImageSubmissionTitleLength) {
+    return { ok: false, error: `이미지 제목은 최대 ${gameConfig.maxImageSubmissionTitleLength}자까지 입력할 수 있습니다.` };
+  }
+  if (rawDescription.length > gameConfig.maxImageSubmissionDescriptionLength) {
+    return { ok: false, error: `이미지 설명은 최대 ${gameConfig.maxImageSubmissionDescriptionLength}자까지 입력할 수 있습니다.` };
+  }
+
+  const title = normalizeOptionalText(rawTitle, gameConfig.maxImageSubmissionTitleLength);
+  const description = normalizeOptionalText(rawDescription, gameConfig.maxImageSubmissionDescriptionLength);
+  return { ok: true, imageUrl: parsed.toString(), title, description };
+}
+
 function normalizeTags(value) {
   if (Array.isArray(value)) return value.map(String).map((tag) => tag.trim()).filter(Boolean).slice(0, 20);
   return String(value || "")
@@ -832,6 +940,11 @@ function normalizeTags(value) {
 function normalizeReportStatus(value) {
   const status = String(value || "");
   return ["pending", "hidden", "dismissed"].includes(status) ? status : "";
+}
+
+function normalizeImageSubmissionStatus(value) {
+  const status = String(value || "");
+  return ["pending", "approved", "rejected"].includes(status) ? status : "";
 }
 
 function validateCaption(value) {
@@ -1954,6 +2067,21 @@ function formatImageRecord(image) {
   return {
     ...image,
     tags: parseJsonArray(image.tagsJson)
+  };
+}
+
+function formatImageSubmissionRecord(submission) {
+  return {
+    id: submission.id,
+    imageUrl: submission.imageUrl,
+    title: submission.title || "",
+    description: submission.description || "",
+    submittedByNickname: submission.submittedByNickname,
+    submittedBySessionId: submission.submittedBySessionId,
+    status: submission.status,
+    adminNote: submission.adminNote || "",
+    createdAt: submission.createdAt,
+    reviewedAt: submission.reviewedAt
   };
 }
 

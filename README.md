@@ -250,6 +250,7 @@ DB 모델은 Prisma의 `PlayerProfile`이며, `playerSessionId`가 unique 값입
 ## 이미지 관리
 
 `/admin/images`에서 이미지 데이터를 관리합니다.
+`/admin/image-submissions`에서 플레이어가 보낸 이미지 추가 신청을 검토합니다.
 
 이미지 데이터 구조:
 
@@ -269,6 +270,26 @@ DB 모델은 Prisma의 `PlayerProfile`이며, `playerSessionId`가 unique 값입
 
 서버 시작 시 `public/game-images` 아래 이미지 파일은 DB에 자동 등록됩니다.
 반대로 `public/game-images`에서 삭제된 로컬 이미지 경로는 서버 시작 시 DB에서도 정리되어 더 이상 게임에 나오지 않습니다.
+
+## 이미지 추가 신청
+
+플레이어는 로비나 방 안의 `이미지 추가 신청` 버튼으로 이미지 URL을 제출할 수 있습니다.
+
+신청 입력 항목:
+
+- 이미지 URL 필수
+- 이미지 제목 선택
+- 간단한 설명 선택
+
+서버 검증:
+
+- `http` 또는 `https` URL만 허용합니다.
+- 잘못된 URL과 너무 긴 문자열은 거부합니다.
+- 같은 `playerSessionId`는 5분에 1회만 신청할 수 있습니다.
+
+관리자는 `/admin/image-submissions`에서 신청 목록을 보고 승인 또는 기각할 수 있습니다. 승인해도 게임 이미지 풀에 자동 추가되지는 않고 `approved` 상태로만 저장됩니다. 최종 게임 이미지 등록은 관리자가 `/admin/images`에서 직접 처리합니다.
+
+Render 무료 플랜에서는 서버 로컬 디스크가 영구 저장소로 적합하지 않고, 재배포/재시작 시 파일 유지가 보장되지 않을 수 있습니다. 그래서 현재 이미지 신청은 실제 파일 업로드 저장이 아니라 외부 이미지 URL 제출 방식으로만 운영합니다.
 
 ## 운영/안전 기능
 
@@ -360,6 +381,10 @@ adminLoginRateLimitWindowMinutes: 10
 adminLoginRateLimitMaxAttempts: 5
 defaultLoadTestUsers: 50
 profileStatsMinPlayers: 3
+imageSubmissionCooldownMs: 300000
+maxImageSubmissionUrlLength: 500
+maxImageSubmissionTitleLength: 80
+maxImageSubmissionDescriptionLength: 500
 maxChatMessageLength: 100
 chatCooldownMs: 1000
 maxChatHistoryPerRoom: 50
