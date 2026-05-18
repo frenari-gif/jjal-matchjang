@@ -5,6 +5,7 @@ const gameConfig = Object.freeze({
   adminLoginRateLimitWindowMinutes: 10,
   adminLoginRateLimitMaxAttempts: 5,
   defaultLoadTestUsers: 50,
+  profileStatsMinPlayers: 3,
   maxChatMessageLength: 100,
   chatCooldownMs: 1000,
   maxChatHistoryPerRoom: 50,

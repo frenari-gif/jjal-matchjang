@@ -182,6 +182,7 @@ Render 배포 시에도 `public/audio` 안의 mp3 파일이 저장소와 배포 
 - 닉네임은 바꿀 수 있지만 기록은 `playerSessionId`에 계속 누적됩니다.
 - 같은 브라우저에서는 서버를 재시작해도 누적 기록이 유지됩니다.
 - 다른 브라우저나 다른 기기에서는 localStorage가 다르므로 다른 플레이어로 취급됩니다.
+- 게임 시작 시 접속 인원이 3명 이상인 방에서만 누적 기록이 반영됩니다. 2명 방도 게임은 가능하지만 플레이 게임 수, 승리, 라운드, 투표 기록은 증가하지 않습니다.
 - 로그인 시스템은 아직 없지만, 나중에 로그인 계정과 `PlayerProfile`을 연결하는 방식으로 확장할 수 있습니다.
 
 저장되는 기록:
@@ -267,6 +268,7 @@ DB 모델은 Prisma의 `PlayerProfile`이며, `playerSessionId`가 unique 값입
 `enabled=false`인 이미지는 게임 라운드에 나오지 않습니다.
 
 서버 시작 시 `public/game-images` 아래 이미지 파일은 DB에 자동 등록됩니다.
+반대로 `public/game-images`에서 삭제된 로컬 이미지 경로는 서버 시작 시 DB에서도 정리되어 더 이상 게임에 나오지 않습니다.
 
 ## 운영/안전 기능
 
@@ -357,6 +359,7 @@ adminSessionTimeoutMinutes: 30
 adminLoginRateLimitWindowMinutes: 10
 adminLoginRateLimitMaxAttempts: 5
 defaultLoadTestUsers: 50
+profileStatsMinPlayers: 3
 maxChatMessageLength: 100
 chatCooldownMs: 1000
 maxChatHistoryPerRoom: 50
@@ -403,7 +406,6 @@ $env:LOAD_TEST_USERS=100; npm run load:test
 
 이미지는 `public/game-images` 아래에 넣으면 서버 시작 시 DB에 자동 등록됩니다.
 
-- 샘플 이미지: `public/game-images/samples`
 - 직접 추가 권장 위치: `public/game-images/user`
 - 지원 확장자: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.svg`
 - 권장 비율: 16:9

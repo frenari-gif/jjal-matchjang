@@ -104,6 +104,8 @@ function setupGameSocket(io, prisma) {
         usedImages: [],
         rounds: [],
         winnerIds: [],
+        startedPlayerCount: 0,
+        profileStatsEligible: false,
         startedAt: null,
         finishedAt: null,
         createdAt: now,
@@ -331,7 +333,10 @@ function setupGameSocket(io, prisma) {
         return reply(callback, false, `최소 ${room.settings.minPlayers}명이 필요합니다.`);
       }
 
+      const startingPlayerCount = connectedPlayers(room).length;
       room.startedAt = new Date();
+      room.startedPlayerCount = startingPlayerCount;
+      room.profileStatsEligible = startingPlayerCount >= gameConfig.profileStatsMinPlayers;
       touchRoom(room);
       addSystemChatMessage(room, "게임이 시작되었습니다.");
       logEvent("game_started", "Game started", { roomCode: room.code, actor: player.nickname, metadata: roomSummary(room) });
@@ -977,6 +982,7 @@ function formatPlayerProfile(profile) {
 
 function recordRoundStats(room) {
   if (!prismaRef?.playerProfile) return;
+  if (!isProfileStatsEligible(room)) return;
 
   const visible = visibleSubmissions(room);
   const maxVotes = Math.max(...visible.map((submission) => submission.votes.length), 0);
@@ -999,6 +1005,7 @@ function recordRoundStats(room) {
 
 function recordGameStats(room) {
   if (!prismaRef?.playerProfile) return;
+  if (!isProfileStatsEligible(room)) return;
   const roundsPlayed = Math.max(0, room.rounds.length || room.roundIndex || 0);
   const winnerIds = new Set(room.winnerIds || []);
 
@@ -1011,6 +1018,10 @@ function recordGameStats(room) {
   })).catch((error) => {
     logServerError("Failed to record game stats", error);
   });
+}
+
+function isProfileStatsEligible(room) {
+  return Boolean(room?.profileStatsEligible);
 }
 
 async function incrementPlayerProfile(player, increments) {
@@ -1182,9 +1193,7 @@ function pickImage(room) {
   if (imageCacheInitialized) return null;
 
   const images = listGameImages();
-  if (images.length === 0) {
-    return { src: "/game-images/samples/sample-01.svg", name: "sample-01.svg" };
-  }
+  if (images.length === 0) return null;
 
   const selected = images[Math.floor(Math.random() * images.length)] || images[0];
   return selected;
@@ -1200,6 +1209,8 @@ async function seedPersistentData(prisma) {
   }));
 
   const files = listGameImages();
+  await removeStaleLocalImageRecords(prisma, files);
+
   await Promise.all(files.map((image) => {
     return prisma.gameImage.upsert({
       where: { src: image.src },
@@ -1219,11 +1230,27 @@ async function seedPersistentData(prisma) {
 
 async function refreshImageCache(prisma) {
   try {
-    imageCache = (await prisma.gameImage.findMany({ orderBy: { createdAt: "asc" } })).map(formatImageRecord);
+    imageCache = (await prisma.gameImage.findMany({ orderBy: { createdAt: "asc" } }))
+      .map(formatImageRecord)
+      .filter(isUsableImageRecord);
     imageCacheInitialized = true;
   } catch (error) {
     logServerError("Failed to load image cache", error);
   }
+}
+
+async function removeStaleLocalImageRecords(prisma, files) {
+  const existingLocalSources = new Set(files.map((image) => image.src));
+  const localRecords = await prisma.gameImage.findMany({
+    where: { src: { startsWith: "/game-images/" } },
+    select: { id: true, src: true }
+  });
+  const staleIds = localRecords
+    .filter((record) => !existingLocalSources.has(record.src))
+    .map((record) => record.id);
+
+  if (staleIds.length === 0) return;
+  await prisma.gameImage.deleteMany({ where: { id: { in: staleIds } } });
 }
 
 function listGameImages() {
@@ -1231,6 +1258,18 @@ function listGameImages() {
   const files = [];
   walkImages(PUBLIC_IMAGES_DIR, files);
   return files.sort((a, b) => a.src.localeCompare(b.src));
+}
+
+function isUsableImageRecord(image) {
+  if (!image?.src?.startsWith("/game-images/")) return true;
+  return localGameImageExists(image.src);
+}
+
+function localGameImageExists(src) {
+  const publicRoot = path.resolve(process.cwd(), "public");
+  const imageRoot = path.resolve(publicRoot, "game-images");
+  const imagePath = path.resolve(publicRoot, src.replace(/^\/+/, ""));
+  return imagePath.startsWith(imageRoot + path.sep) && fs.existsSync(imagePath);
 }
 
 function walkImages(directory, files) {
