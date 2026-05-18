@@ -669,6 +669,28 @@ a:focus-visible {
   border-radius: 999px;
 }
 
+.lobby-settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #111722;
+  padding: 12px;
+}
+
+.lobby-settings-toggle span,
+.settings-help {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.settings-help {
+  margin: -6px 0 4px;
+  font-size: 13px;
+}
+
 .room-settings-editor {
   display: grid;
   gap: 12px;

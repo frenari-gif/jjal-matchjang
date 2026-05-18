@@ -90,7 +90,7 @@ function setupGameSocket(io, prisma) {
         name: normalizeRoomName(payload?.roomName) || `${nickname}의 방`,
         isPublic: payload?.isPublic !== false,
         streamerMode: Boolean(payload?.streamerMode),
-        hideRoomCode: Boolean(payload?.hideRoomCode),
+        hideRoomCode: Boolean(payload?.hideRoomCode || payload?.streamerMode),
         hostId: player.id,
         settings,
         phase: "lobby",
@@ -286,7 +286,11 @@ function setupGameSocket(io, prisma) {
       const nextName = normalizeRoomName(payload?.roomName) || room.name;
       const nextPublic = typeof payload?.isPublic === "boolean" ? payload.isPublic : room.isPublic;
       const nextStreamerMode = typeof payload?.streamerMode === "boolean" ? payload.streamerMode : Boolean(room.streamerMode);
-      const nextHideRoomCode = typeof payload?.hideRoomCode === "boolean" ? payload.hideRoomCode : Boolean(room.hideRoomCode);
+      const nextHideRoomCode = nextStreamerMode
+        ? true
+        : typeof payload?.hideRoomCode === "boolean"
+          ? payload.hideRoomCode
+          : Boolean(room.hideRoomCode);
       const messages = describeRoomSettingChanges(room, {
         name: nextName,
         isPublic: nextPublic,

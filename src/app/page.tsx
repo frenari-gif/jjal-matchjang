@@ -711,7 +711,10 @@ export default function Home() {
                 <input
                   type="checkbox"
                   checked={streamerMode}
-                  onChange={(event) => setStreamerMode(event.target.checked)}
+                  onChange={(event) => {
+                    setStreamerMode(event.target.checked);
+                    if (event.target.checked) setHideRoomCode(true);
+                  }}
                 />
                 스트리머 모드
               </label>
@@ -1267,6 +1270,8 @@ function LobbyView({
     settings: GameSettings;
   }) => void;
 }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   return (
     <div className="lobby">
       <div className="lobby-main">
@@ -1298,6 +1303,14 @@ function LobbyView({
         {roomState.streamerMode && <span>스트리머 모드</span>}
       </div>
       {isHost && (
+        <div className="lobby-settings-toggle">
+          <button type="button" className="secondary-button" onClick={() => setSettingsOpen((previous) => !previous)}>
+            {settingsOpen ? "방 설정 닫기" : "방 설정"}
+          </button>
+          <span>방 설정은 대기방에서만 변경할 수 있습니다.</span>
+        </div>
+      )}
+      {isHost && settingsOpen && (
         <RoomSettingsEditor
           roomState={roomState}
           isBusy={isBusy}
@@ -1400,10 +1413,20 @@ function RoomSettingsEditor({
           방코드 비공개
         </label>
         <label className="toggle">
-          <input type="checkbox" checked={streamerMode} onChange={(event) => setStreamerMode(event.target.checked)} />
+          <input
+            type="checkbox"
+            checked={streamerMode}
+            onChange={(event) => {
+              setStreamerMode(event.target.checked);
+              if (event.target.checked) setHideRoomCode(true);
+            }}
+          />
           스트리머 모드
         </label>
       </div>
+      <p className="settings-help">
+        방코드 비공개는 코드만 숨깁니다. 스트리머 모드는 방송용 안전 모드라 방코드 비공개를 자동으로 포함합니다.
+      </p>
       <button className="secondary-button full" disabled={isBusy}>
         {isBusy ? "저장 중" : "설정 저장"}
       </button>
