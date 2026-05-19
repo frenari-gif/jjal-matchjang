@@ -572,6 +572,22 @@ function setupGameSocket(io, prisma) {
       reply(callback, true);
     });
 
+    socket.on("game:rematch", (callback) => {
+      const result = getRoomAndPlayer(socket);
+      if (!result) return reply(callback, false, "참가 중인 방이 없습니다.");
+      const { room, player } = result;
+      if (room.hostId !== player.id) return reply(callback, false, "방장만 다시하기를 시작할 수 있습니다.");
+      if (room.phase !== "final") return reply(callback, false, "최종 결과 화면에서만 다시하기를 할 수 있습니다.");
+
+      resetRoomForRematch(room);
+      touchRoom(room);
+      addSystemChatMessage(room, `${player.nickname}님이 리매치를 준비했습니다.`);
+      logEvent("game_rematch", "Host prepared rematch", { roomCode: room.code, actor: player.nickname });
+      reply(callback, true, null, { state: serializeRoom(room, player.id) });
+      emitRoomState(io, room);
+      emitPublicRooms(io);
+    });
+
     socket.on("disconnect", () => {
       leaveCurrentRoom(io, socket, { remove: false });
     });
@@ -1206,6 +1222,27 @@ function startRound(io, room) {
   setRoomTimer(room, room.settings.captionSeconds, () => finishCaptionPhase(io, room));
   emitRoomState(io, room);
   emitPublicRooms(io);
+}
+
+function resetRoomForRematch(room) {
+  clearRoomTimer(room);
+  for (const player of room.players) {
+    player.score = 0;
+    player.rateLimits = {};
+  }
+  room.phase = "lobby";
+  room.roundIndex = 0;
+  room.currentImage = null;
+  room.submissions = [];
+  room.usedImages = [];
+  room.rounds = [];
+  room.winnerIds = [];
+  room.startedPlayerCount = 0;
+  room.profileStatsEligible = false;
+  room.startedAt = null;
+  room.finishedAt = null;
+  room.endsAt = null;
+  room.scoredRound = false;
 }
 
 function finishCaptionPhase(io, room) {

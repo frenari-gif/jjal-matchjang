@@ -2,9 +2,14 @@
 
 import { ReactNode, useEffect, useRef } from "react";
 
-const BGM_SRC = "/audio/Cardboard Thunder.mp3";
+const BGM_TRACKS = {
+  lobby: "/audio/Cardboard Thunder.mp3",
+  game: "/audio/Croatian Rhapsody.mp3"
+} as const;
 const CLICK_SRC = "/audio/Click Sound.mp3";
 const SOUND_STORAGE = "jjal-matchjang:sound-settings";
+
+type BgmTrack = keyof typeof BGM_TRACKS;
 
 type SoundSettings = {
   bgmVolume: number;
@@ -22,6 +27,7 @@ export function SoundProvider({ children }: { children: ReactNode }) {
   const settingsRef = useRef<SoundSettings>(DEFAULT_SOUND_SETTINGS);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
   const clickRef = useRef<HTMLAudioElement | null>(null);
+  const bgmSrcRef = useRef<string>(BGM_TRACKS.lobby);
   const bgmStartedRef = useRef(false);
   const missingBgmRef = useRef(false);
   const missingClickRef = useRef(false);
@@ -29,7 +35,7 @@ export function SoundProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     settingsRef.current = loadSoundSettings();
-    bgmRef.current = new Audio(BGM_SRC);
+    bgmRef.current = createBgm(BGM_TRACKS.lobby);
     bgmRef.current.loop = true;
     bgmRef.current.preload = "auto";
     clickRef.current = new Audio(CLICK_SRC);
@@ -44,6 +50,12 @@ export function SoundProvider({ children }: { children: ReactNode }) {
       void ensureBgmStarted();
     }
 
+    function handleBgmTrack(event: Event) {
+      const detail = (event as CustomEvent<{ track?: BgmTrack }>).detail || {};
+      const nextSrc = detail.track ? BGM_TRACKS[detail.track] : BGM_TRACKS.lobby;
+      switchBgm(nextSrc || BGM_TRACKS.lobby);
+    }
+
     function handleInteraction() {
       void ensureBgmStarted();
     }
@@ -56,6 +68,7 @@ export function SoundProvider({ children }: { children: ReactNode }) {
     }
 
     window.addEventListener("jjal-sound-settings", handleSettings as EventListener);
+    window.addEventListener("jjal-bgm-track", handleBgmTrack as EventListener);
     window.addEventListener("jjal-play-click", playClickSound);
     window.addEventListener("pointerdown", handleInteraction, { once: true });
     window.addEventListener("keydown", handleInteraction, { once: true });
@@ -63,6 +76,7 @@ export function SoundProvider({ children }: { children: ReactNode }) {
 
     return () => {
       window.removeEventListener("jjal-sound-settings", handleSettings as EventListener);
+      window.removeEventListener("jjal-bgm-track", handleBgmTrack as EventListener);
       window.removeEventListener("jjal-play-click", playClickSound);
       document.removeEventListener("click", handleClick, true);
       bgmRef.current?.pause();
@@ -85,6 +99,29 @@ export function SoundProvider({ children }: { children: ReactNode }) {
       if (settings.muted || settings.bgmVolume <= 0) {
         bgmRef.current?.pause();
       }
+    }
+
+    function createBgm(src: string) {
+      const audio = new Audio(src);
+      audio.loop = true;
+      audio.preload = "auto";
+      return audio;
+    }
+
+    function switchBgm(src: string) {
+      if (bgmSrcRef.current === src) {
+        void ensureBgmStarted();
+        return;
+      }
+
+      const shouldResume = bgmStartedRef.current && !settingsRef.current.muted && settingsRef.current.bgmVolume > 0;
+      bgmRef.current?.pause();
+      bgmRef.current = createBgm(src);
+      bgmSrcRef.current = src;
+      bgmStartedRef.current = false;
+      missingBgmRef.current = false;
+      applyVolumes();
+      if (shouldResume) void ensureBgmStarted();
     }
 
     async function ensureBgmStarted() {
@@ -141,6 +178,13 @@ export function broadcastSoundSettings(settings: SoundSettings) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("jjal-sound-settings", {
     detail: normalizeSoundSettings(settings)
+  }));
+}
+
+export function broadcastBgmTrack(track: BgmTrack) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("jjal-bgm-track", {
+    detail: { track }
   }));
 }
 

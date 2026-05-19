@@ -2,7 +2,7 @@
 
 import { FormEvent, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { broadcastSoundSettings, loadSoundSettings, saveSoundSettings } from "../components/SoundProvider";
+import { broadcastBgmTrack, broadcastSoundSettings, loadSoundSettings, saveSoundSettings } from "../components/SoundProvider";
 
 type Phase = "lobby" | "caption" | "reveal" | "voting" | "results" | "final";
 
@@ -120,7 +120,7 @@ type ServerAck = {
 };
 
 type NoticeTone = "info" | "error" | "success";
-type BusyAction = "connect" | "join" | "create" | "quickJoin" | "start" | "caption" | "vote" | "next" | "settings" | null;
+type BusyAction = "connect" | "join" | "create" | "quickJoin" | "start" | "caption" | "vote" | "next" | "rematch" | "settings" | null;
 
 const PLAYER_SESSION_STORAGE = "jjal-matchjang:player-session-id";
 const LAST_ROOM_STORAGE = "jjal-matchjang:last-room-code";
@@ -151,6 +151,7 @@ const BUSY_MESSAGE: Record<Exclude<BusyAction, null>, string> = {
   caption: "제목을 제출하는 중입니다.",
   vote: "투표 결과를 집계하는 중입니다.",
   next: "다음 라운드를 준비 중입니다.",
+  rematch: "리매치를 준비 중입니다.",
   settings: "방 설정을 저장하는 중입니다."
 };
 
@@ -197,7 +198,7 @@ export default function Home() {
   const nicknameInputRef = useRef<HTMLInputElement>(null);
   const roomNameInputRef = useRef<HTMLInputElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
   const lastChatRoomRef = useRef("");
   const lastChatCountRef = useRef(0);
   const lastChatMessageIdRef = useRef("");
@@ -294,6 +295,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    broadcastBgmTrack(roomState && roomState.phase !== "lobby" ? "game" : "lobby");
+  }, [roomState?.phase]);
+
+  useEffect(() => {
     setRoomCodeVisible(false);
   }, [roomState?.code, roomState?.hideRoomCode]);
 
@@ -305,7 +310,7 @@ export default function Home() {
 
   useEffect(() => {
     if (roomState?.phase === "caption" && !roomState.mySubmissionId) {
-      captionInputRef.current?.focus();
+      captionInputRef.current?.focus({ preventScroll: true });
     }
   }, [roomState?.mySubmissionId, roomState?.phase]);
 
@@ -325,7 +330,7 @@ export default function Home() {
       lastChatCountRef.current = messages.length;
       lastChatMessageIdRef.current = latestMessageId;
       setUnreadChatCount(0);
-      window.setTimeout(() => chatEndRef.current?.scrollIntoView({ block: "end" }), 0);
+      window.setTimeout(scrollChatToBottom, 0);
       return;
     }
 
@@ -341,7 +346,7 @@ export default function Home() {
 
     if (!chatCollapsed) {
       setUnreadChatCount(0);
-      window.setTimeout(() => chatEndRef.current?.scrollIntoView({ block: "end" }), 0);
+      window.setTimeout(scrollChatToBottom, 0);
     }
   }, [chatCollapsed, roomState]);
 
@@ -488,6 +493,12 @@ export default function Home() {
     socket?.emit("game:nextRound", handleAck);
   }
 
+  function rematchGame() {
+    if (!ensureConnected()) return;
+    setBusyAction("rematch");
+    socket?.emit("game:rematch", handleAck);
+  }
+
   function saveRoomSettings(payload: {
     roomName: string;
     isPublic: boolean;
@@ -528,10 +539,16 @@ export default function Home() {
       const next = !previous;
       if (!next) {
         setUnreadChatCount(0);
-        window.setTimeout(() => chatEndRef.current?.scrollIntoView({ block: "end" }), 0);
+        window.setTimeout(scrollChatToBottom, 0);
       }
       return next;
     });
+  }
+
+  function scrollChatToBottom() {
+    const messages = chatMessagesRef.current;
+    if (!messages) return;
+    messages.scrollTop = messages.scrollHeight;
   }
 
   function handleProfileAck(response: ServerAck) {
@@ -594,7 +611,7 @@ export default function Home() {
 
   function focusRoomName() {
     setIsPublic(true);
-    window.setTimeout(() => roomNameInputRef.current?.focus(), 0);
+    window.setTimeout(() => roomNameInputRef.current?.focus({ preventScroll: true }), 0);
   }
 
   function updateSoundSettings(next: SoundSettings) {
@@ -941,7 +958,15 @@ export default function Home() {
               </>
             )}
 
-            {roomState.phase === "final" && <FinalView roomState={roomState} />}
+            {roomState.phase === "final" && (
+              <FinalView
+                roomState={roomState}
+                isHost={isHost}
+                isBusy={Boolean(busyAction)}
+                onRematch={rematchGame}
+                onLeave={leaveRoom}
+              />
+            )}
           </section>
 
           <ChatPanel
@@ -949,7 +974,7 @@ export default function Home() {
             draft={chatDraft}
             collapsed={chatCollapsed}
             unreadCount={unreadChatCount}
-            chatEndRef={chatEndRef}
+            messagesRef={chatMessagesRef}
             onDraftChange={setChatDraft}
             onSubmit={submitChat}
             onToggle={toggleChatCollapsed}
@@ -1103,7 +1128,7 @@ function ChatPanel({
   draft,
   collapsed,
   unreadCount,
-  chatEndRef,
+  messagesRef,
   onDraftChange,
   onSubmit,
   onToggle
@@ -1112,7 +1137,7 @@ function ChatPanel({
   draft: string;
   collapsed: boolean;
   unreadCount: number;
-  chatEndRef: RefObject<HTMLDivElement | null>;
+  messagesRef: RefObject<HTMLDivElement | null>;
   onDraftChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onToggle: () => void;
@@ -1132,7 +1157,7 @@ function ChatPanel({
 
       {!collapsed && (
         <div className="chat-body">
-          <div className="chat-messages" aria-live="polite">
+          <div className="chat-messages" aria-live="polite" ref={messagesRef}>
             {messages.length === 0 ? (
               <div className="chat-empty">아직 채팅이 없습니다.</div>
             ) : messages.map((message) => (
@@ -1157,7 +1182,6 @@ function ChatPanel({
                 )}
               </div>
             ))}
-            <div ref={chatEndRef} />
           </div>
 
           <form className="chat-form" onSubmit={onSubmit}>
@@ -1645,7 +1669,19 @@ function SubmissionList({
   );
 }
 
-function FinalView({ roomState }: { roomState: RoomState }) {
+function FinalView({
+  roomState,
+  isHost,
+  isBusy,
+  onRematch,
+  onLeave
+}: {
+  roomState: RoomState;
+  isHost: boolean;
+  isBusy: boolean;
+  onRematch: () => void;
+  onLeave: () => void;
+}) {
   const winners = roomState.players.filter((player) => roomState.winnerIds.includes(player.id));
   const sortedPlayers = [...roomState.players].sort((a, b) => b.score - a.score);
 
@@ -1662,6 +1698,15 @@ function FinalView({ roomState }: { roomState: RoomState }) {
           </div>
         ))}
       </div>
+      <div className="final-actions">
+        <button className="primary-button" onClick={onRematch} disabled={!isHost || isBusy}>
+          {isBusy ? "준비 중" : "다시하기"}
+        </button>
+        <button className="secondary-button" onClick={onLeave} disabled={isBusy}>
+          로비로 나가기
+        </button>
+      </div>
+      {!isHost && <p className="final-help">방장만 다시하기를 시작할 수 있습니다.</p>}
     </div>
   );
 }
